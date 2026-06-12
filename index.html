@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>台股騎士 StockRider TW — 騎上你的股票走勢圖</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- 主選單 -->
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1>🏍️ 台股騎士</h1>
+    <p class="subtitle">把 K 線圖當成越野賽道來騎！紅 K 是上坡、綠 K 是下坡。</p>
+
+    <div class="field">
+      <label>股票代碼</label>
+      <input id="ticker" type="text" value="2330" placeholder="例如 2330" inputmode="numeric" autocomplete="off">
+    </div>
+
+    <div class="chips" id="quick-picks">
+      <button data-code="2330">2330 台積電</button>
+      <button data-code="2317">2317 鴻海</button>
+      <button data-code="2454">2454 聯發科</button>
+      <button data-code="2603">2603 長榮</button>
+      <button data-code="0050">0050 元大台灣50</button>
+    </div>
+
+    <div class="field">
+      <label>區間</label>
+      <div class="chips range" id="ranges">
+        <button data-months="3">3 個月</button>
+        <button data-months="6">6 個月</button>
+        <button data-months="12" class="active">1 年</button>
+        <button data-months="36">3 年</button>
+        <button data-months="60">5 年</button>
+      </div>
+    </div>
+
+    <button id="start-btn" class="primary">開始騎乘 🚀</button>
+    <p id="menu-error" class="error hidden"></p>
+
+    <div class="help">
+      <span><kbd>↑</kbd>/<kbd>↓</kbd> 油門・煞車</span>
+      <span><kbd>←</kbd>/<kbd>→</kbd> 車身平衡</span>
+      <span><kbd>空白鍵</kbd> 跳躍</span>
+      <span><kbd>R</kbd> 重來</span>
+    </div>
+    <p class="disclaimer">本遊戲僅供娛樂，資料來源 FinMind，非投資建議。</p>
+  </div>
+</div>
+
+<!-- 載入中 -->
+<div id="loading" class="overlay hidden">
+  <div class="panel small">
+    <div class="spinner"></div>
+    <p id="loading-text">下載行情資料中…</p>
+  </div>
+</div>
+
+<!-- 結算畫面（墜車 / 完賽） -->
+<div id="result" class="overlay hidden">
+  <div class="panel small">
+    <h2 id="result-title">💥 墜車！</h2>
+    <p id="result-detail"></p>
+    <div class="result-stats" id="result-stats"></div>
+    <div class="row">
+      <button id="retry-btn" class="primary">再騎一次 (R)</button>
+      <button id="menu-btn">換一檔股票</button>
+    </div>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div class="hud-left">
+    <div id="hud-stock" class="hud-stock">2330 台積電</div>
+    <div id="hud-date" class="hud-date">—</div>
+    <div id="hud-price" class="hud-price">—</div>
+  </div>
+  <div class="hud-right">
+    <div class="hud-label">投資組合</div>
+    <div id="hud-value" class="hud-value">NT$100,000</div>
+    <div id="hud-return" class="hud-return">+0.0%</div>
+  </div>
+  <div class="hud-progress"><div id="hud-progress-bar"></div></div>
+</div>
+
+<!-- 觸控按鍵 -->
+<div id="touch" class="hidden">
+  <div class="touch-group left">
+    <button id="t-lean-l">↶</button>
+    <button id="t-lean-r">↷</button>
+  </div>
+  <div class="touch-group right">
+    <button id="t-jump">跳</button>
+    <button id="t-brake">煞</button>
+    <button id="t-gas">油門</button>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

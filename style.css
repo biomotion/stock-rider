@@ -160,6 +160,28 @@ kbd {
 .result-stats .v.up { color: var(--up); }
 .result-stats .v.down { color: var(--down); }
 
+/* ── 自動演示 ── */
+#demo-badge {
+  position: fixed;
+  bottom: 28px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(22, 29, 44, .85);
+  border: 1px solid rgba(255, 176, 46, .5);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 10px 22px;
+  font-size: 14px;
+  z-index: 7;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: demo-pulse 2.2s ease-in-out infinite;
+  text-shadow: 0 1px 4px rgba(0,0,0,.5);
+}
+@keyframes demo-pulse {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; }
+}
+
 /* ── 觸控 ── */
 #touch {
   position: fixed; bottom: 0; left: 0; right: 0;

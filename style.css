@@ -139,6 +139,38 @@ kbd {
 .hud-return.up { color: var(--up); }
 .hud-return.down { color: var(--down); }
 
+.hud-center { text-align: center; flex: 1; }
+.hud-score {
+  font-size: 26px; font-weight: 800; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.hud-combo {
+  font-size: 14px; font-weight: 800; color: #ff8a3d;
+  margin-top: 2px;
+}
+
+/* 氮氣條 */
+.nitro {
+  position: fixed; left: 50%; bottom: 16px;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px;
+  z-index: 5; pointer-events: none;
+}
+.nitro-label { font-size: 12px; font-weight: 800; color: #8fd0ff; letter-spacing: 1px; }
+.nitro-track {
+  width: 130px; height: 9px;
+  background: rgba(255,255,255,.12);
+  border-radius: 999px; overflow: hidden;
+}
+#nitro-bar {
+  height: 100%; width: 100%;
+  background: linear-gradient(90deg, #2d8cff, #8fd0ff);
+  border-radius: 999px;
+  transition: width .1s linear;
+}
+#nitro-bar.cooldown { background: #5a6478; }
+#nitro-bar.full { background: linear-gradient(90deg, #2dd674, #8fffc0); }
+
 .hud-progress {
   position: fixed; top: 0; left: 0; right: 0; height: 4px;
   background: rgba(255,255,255,.08);

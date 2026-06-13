@@ -10,11 +10,26 @@ const SPRING_C = 140;
 const DRIVE_F = 2600;
 const BRAKE_F = 3200;
 const MAX_SPEED = 980;
-const LEAN_T = 26000;        // 空中翻轉力矩
-const LEAN_T_GROUND = 16000;
+const LEAN_T = 21000;        // 傾斜力矩（空中翻轉、地面翹孤輪/點頭）
 const INERTIA = 760;
 const JUMP_V = 560;
 const HEAD_LOCAL = { x: 4, y: 30 }; // 頭部位置（碰到地形即墜車）
+
+// 角度穩定（移植自 StonkRider 的調校，讓控制不靈敏、不易亂翻）
+const W_MAX = 5.8;           // 角速度硬上限（rad/s）— 防翻車的關鍵
+const AUTO_LEVEL = 0.18;     // 著地時往地形坡度回正的增益
+const GROUND_ADAMP = 0.10;   // 著地角速度阻尼
+const AIR_ADAMP = 0.965;     // 空中角速度阻尼（每 1/60 秒）
+const AIR_ASSIST = 0.9;      // 空中沒按鍵時微微對齊落點
+
+// 氮氣
+const NITRO_MAX = 1;         // 滿格
+const NITRO_DRAIN = 0.42;    // 每秒耗用（約 2.4 秒用完）
+const NITRO_REGEN = 0.18;    // 每秒回充
+const NITRO_FORCE = 1500;    // 沿車身方向推力
+const NITRO_COOLDOWN = 0.5;  // 用罄後的冷卻（秒）
+
+const TAU = Math.PI * 2;
 
 export class Game {
   constructor(canvas, terrain, meta, callbacks) {
@@ -24,11 +39,22 @@ export class Game {
     this.meta = meta; // {stockId, stockName, startPrice, capital}
     this.cb = callbacks; // {onHud, onEnd}
 
-    this.input = { gas: false, brake: false, leanL: false, leanR: false, jump: false };
+    this.input = { gas: false, brake: false, leanL: false, leanR: false, jump: false, nitro: false };
     this.state = 'riding'; // riding | crashed | finished
     this.particles = [];
+    this.popups = [];      // 特技浮動文字
     this.elapsed = 0;
     this.maxX = terrain.spawnX;
+
+    // 分數 / 特技狀態
+    this.score = 0;
+    this.combo = 1;        // 連段倍率 1..5
+    this.flips = 0;        // 累計圈數
+    this.nitro = NITRO_MAX;
+    this.nitroCooldown = 0;
+    this.airTime = 0;      // 本次騰空時間
+    this.airRot = 0;       // 本次騰空累積旋轉（弧度，帶正負）
+    this.wasGrounded = true;
 
     // 機車剛體
     const x = terrain.spawnX;
@@ -134,21 +160,9 @@ export class Game {
       }
     }
 
-    // 平衡／翻轉
-    const lt = b.grounded ? LEAN_T_GROUND : LEAN_T;
-    if (inp.leanL) torque += lt;   // 後仰（逆時針）
-    if (inp.leanR) torque -= lt;   // 前傾
-    torque += -b.w * (b.grounded ? 500 : 160); // 角阻尼
-
-    // 空中輔助：沒按方向鍵時，緩緩轉向前方落點的地形角度
-    if (!b.grounded && !inp.leanL && !inp.leanR) {
-      const ahead = b.x + Math.max(40, b.vx * 0.35);
-      const n2 = T.normalAt(ahead);
-      const slopeA = Math.atan2(-n2.x, n2.y);
-      let err = slopeA - b.a;
-      err = Math.atan2(Math.sin(err), Math.cos(err)); // 取最短角差
-      torque += err * 3400 - b.w * 600;
-    }
+    // 傾斜：玩家施加力矩決定翻轉方向（←後仰/翹孤輪、→前傾/點頭）
+    if (inp.leanL) torque += LEAN_T;
+    if (inp.leanR) torque -= LEAN_T;
 
     // 跳躍：沿地形法線方向施加衝量
     if (inp.jump && b.grounded && b.jumpCooldown <= 0) {
@@ -158,17 +172,60 @@ export class Game {
       b.jumpCooldown = 0.45;
     }
 
+    // 氮氣：沿車身朝向推進，有限燃料 + 冷卻
+    this.nitroCooldown = Math.max(0, this.nitroCooldown - dt);
+    let firing = false;
+    if (inp.nitro && this.nitro > 0 && this.nitroCooldown <= 0) {
+      firing = true;
+      this.nitro = Math.max(0, this.nitro - NITRO_DRAIN * dt);
+      fx += Math.cos(b.a) * NITRO_FORCE;
+      fy += Math.sin(b.a) * NITRO_FORCE;
+      if (this.nitro <= 0) this.nitroCooldown = NITRO_COOLDOWN;
+    } else if (!inp.nitro || this.nitro <= 0) {
+      this.nitro = Math.min(NITRO_MAX, this.nitro + NITRO_REGEN * dt);
+    }
+    this.firing = firing;
+
     // 空氣阻力
     fx += -b.vx * 0.06;
     fy += -b.vy * 0.02;
 
+    // 線速度積分
     b.vx += fx * dt;
     b.vy += fy * dt;
+
+    // 角速度積分 + 穩定（移植自參考站：硬上限 + 著地自動回正 + 空中阻尼）
     b.w += (torque / INERTIA) * dt;
-    b.w = Math.max(-14, Math.min(14, b.w));
+    const k = dt * 60; // 換算成「每 1/60 秒」的等效係數
+    if (b.grounded) {
+      const n2 = T.normalAt(b.x);
+      const slope = Math.atan2(-n2.x, n2.y);
+      let err = Math.atan2(Math.sin(slope - b.a), Math.cos(slope - b.a));
+      b.w += (err * AUTO_LEVEL - b.w * GROUND_ADAMP) * k;
+    } else {
+      b.w *= Math.pow(AIR_ADAMP, k);
+      if (!inp.leanL && !inp.leanR && b.vy < 0) {
+        const ahead = b.x + Math.max(40, b.vx * 0.35);
+        const n2 = T.normalAt(ahead);
+        const slope = Math.atan2(-n2.x, n2.y);
+        let err = Math.atan2(Math.sin(slope - b.a), Math.cos(slope - b.a));
+        b.w += err * AIR_ASSIST * k;
+      }
+    }
+    b.w = Math.max(-W_MAX, Math.min(W_MAX, b.w));
+
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     b.a += b.w * dt;
+
+    // 特技：累積騰空時間與旋轉量；落地時結算
+    if (!b.grounded) {
+      this.airTime += dt;
+      this.airRot += b.w * dt;
+    } else if (!this.wasGrounded) {
+      this.onLanding();
+    }
+    this.wasGrounded = b.grounded;
 
     b.wheelSpin += (b.vx / WHEEL_R) * dt;
     this.maxX = Math.max(this.maxX, b.x);
@@ -201,8 +258,47 @@ export class Game {
     }
   }
 
+  // 落地結算特技
+  onLanding() {
+    const b = this.bike, T = this.terrain;
+    const air = this.airTime, rot = this.airRot;
+    this.airTime = 0; this.airRot = 0;
+    if (air < 0.25) return; // 太短不算騰空
+
+    const n = T.normalAt(b.x);
+    const slope = Math.atan2(-n.x, n.y);
+    const err = Math.abs(Math.atan2(Math.sin(slope - b.a), Math.cos(slope - b.a)));
+    if (err > 1.2) return; // 落地歪太多 → 交給墜車判定，不給分
+
+    // 接近一圈（差 20° 內）就算完成，補償傾斜加速所損耗的轉角
+    const flips = Math.floor((Math.abs(rot) + 0.35) / TAU);
+    if (flips > 0) {
+      const pts = flips * 500 * this.combo;
+      this.score += pts;
+      this.flips += flips;
+      const kind = rot > 0 ? '後空翻' : '前空翻';
+      const pre = flips === 1 ? '' : flips === 2 ? 'Double ' : flips === 3 ? 'Triple ' : `${flips}x `;
+      this.popup(`${pre}${kind}! +${pts}`, '#FFD700', 1.4);
+      this.combo = Math.min(5, this.combo + 1);
+      if (this.combo > 1) this.popup(`連段 x${this.combo}`, '#FF8A3D', 0.9);
+    } else if (air > 1.4) {
+      const pts = Math.round(120 * this.combo);
+      this.score += pts;
+      this.popup(`大跳躍! +${pts}`, '#00BFFF', 1.2);
+      this.combo = Math.min(5, this.combo + 1);
+    }
+  }
+
+  popup(text, color, dur = 1.2) {
+    this.popups.push({ x: this.bike.x, y: this.bike.y + 50, text, color, t: 0, dur });
+  }
+
   end(reason) {
     if (this.state !== 'riding') return;
+    if (reason === 'crashed') {
+      this.score = Math.max(0, this.score - 500); // 撞車罰分、連段歸零
+      this.combo = 1;
+    }
     this.state = reason;
     const stats = this.currentStats();
     this.cb.onEnd(reason, stats);
@@ -217,7 +313,11 @@ export class Game {
     const day = T.days[Math.round(f)];
     const progress = Math.max(0, Math.min(
       (this.maxX - T.startX) / (T.startX + (T.days.length - 1) * DX - T.startX), 1));
-    return { price, value, ret, date: day.date, progress, elapsed: this.elapsed };
+    return {
+      price, value, ret, date: day.date, progress, elapsed: this.elapsed,
+      score: this.score, combo: this.combo, flips: this.flips,
+      nitro: this.nitro, firing: this.firing,
+    };
   }
 
   updateHud() {
@@ -257,6 +357,28 @@ export class Game {
     this.drawFinish();
     this.drawParticles();
     this.drawBike();
+    this.drawPopups();
+  }
+
+  drawPopups() {
+    const ctx = this.ctx;
+    const dt = 1 / 60;
+    this.popups = this.popups.filter(p => (p.t += dt) < p.dur);
+    ctx.save();
+    ctx.textAlign = 'center';
+    for (const p of this.popups) {
+      const k = p.t / p.dur;
+      const x = this.sx(p.x);
+      const y = this.sy(p.y) - k * 46;          // 緩緩上飄
+      ctx.globalAlpha = Math.max(0, 1 - k);
+      ctx.font = `800 ${Math.round(20 * this.cam.zoom)}px system-ui`;
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.strokeText(p.text, x, y);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, x, y);
+    }
+    ctx.restore();
   }
 
   drawGridAndCandles(xL, xR) {
@@ -401,6 +523,25 @@ export class Game {
     ctx.rotate(-b.a); // 世界逆時針 → 螢幕順時針
 
     const wheelY = WHEEL_DROP;
+
+    // 氮氣火焰（車尾後方）
+    if (this.firing) {
+      const fl = (26 + Math.random() * 18);
+      ctx.save();
+      ctx.translate(-WHEEL_BASE / 2 - 4, wheelY - 4);
+      const grad = ctx.createLinearGradient(0, 0, -fl, 0);
+      grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+      grad.addColorStop(0.4, 'rgba(255,176,46,0.9)');
+      grad.addColorStop(1, 'rgba(255,77,79,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.lineTo(-fl, 0);
+      ctx.lineTo(0, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
 
     // 輪子
     for (const wx of [-WHEEL_BASE / 2, WHEEL_BASE / 2]) {

@@ -44,8 +44,9 @@
 
     <div class="help">
       <span><kbd>↑</kbd>/<kbd>↓</kbd> 油門・煞車</span>
-      <span><kbd>←</kbd>/<kbd>→</kbd> 車身平衡</span>
+      <span><kbd>←</kbd>/<kbd>→</kbd> 後仰・前傾（空中翻轉得分）</span>
       <span><kbd>空白鍵</kbd> 跳躍</span>
+      <span><kbd>N</kbd>/<kbd>Shift</kbd> 氮氣</span>
       <span><kbd>R</kbd> 重來</span>
     </div>
     <p class="disclaimer">本遊戲僅供娛樂，資料來源 FinMind，非投資建議。</p>
@@ -80,12 +81,21 @@
     <div id="hud-date" class="hud-date">—</div>
     <div id="hud-price" class="hud-price">—</div>
   </div>
+  <div class="hud-center">
+    <div class="hud-label">特技分數</div>
+    <div id="hud-score" class="hud-score">0</div>
+    <div id="hud-combo" class="hud-combo hidden">連段 x1</div>
+  </div>
   <div class="hud-right">
     <div class="hud-label">投資組合</div>
     <div id="hud-value" class="hud-value">NT$100,000</div>
     <div id="hud-return" class="hud-return">+0.0%</div>
   </div>
   <div class="hud-progress"><div id="hud-progress-bar"></div></div>
+  <div id="nitro" class="nitro">
+    <span class="nitro-label">N²O</span>
+    <div class="nitro-track"><div id="nitro-bar"></div></div>
+  </div>
 </div>
 
 <!-- 自動演示徽章 -->
@@ -98,6 +108,7 @@
     <button id="t-lean-r">↷</button>
   </div>
   <div class="touch-group right">
+    <button id="t-nitro">N²O</button>
     <button id="t-jump">跳</button>
     <button id="t-brake">煞</button>
     <button id="t-gas">油門</button>

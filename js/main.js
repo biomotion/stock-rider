@@ -99,7 +99,7 @@ function launch(cfg) {
 
   $('hud-stock').textContent = `${cfg.stockId} ${cfg.stockName || ''}`.trim();
   show('hud');
-  if (demoMode) hide('touch'); else show('touch');
+  if (demoMode) { hide('touch'); hide('nitro'); } else { show('touch'); show('nitro'); }
 
   game = new Game(canvas, terrain, meta, {
     onHud: updateHud,
@@ -122,6 +122,15 @@ function updateHud(s) {
   r.textContent = (s.ret >= 0 ? '+' : '') + s.ret.toFixed(1) + '%';
   r.className = 'hud-return ' + (s.ret >= 0 ? 'up' : 'down');
   $('hud-progress-bar').style.width = (s.progress * 100).toFixed(1) + '%';
+
+  $('hud-score').textContent = s.score.toLocaleString('en-US');
+  const combo = $('hud-combo');
+  if (s.combo > 1) { combo.textContent = `連段 x${s.combo}`; combo.classList.remove('hidden'); }
+  else combo.classList.add('hidden');
+
+  const bar = $('nitro-bar');
+  bar.style.width = (s.nitro * 100).toFixed(0) + '%';
+  bar.className = s.nitro >= 0.999 ? 'full' : (s.nitro <= 0.001 ? 'cooldown' : '');
 }
 
 // ── 自動演示（attract mode）──
@@ -214,6 +223,8 @@ function showResult(reason, s) {
 
   const retClass = s.ret >= 0 ? 'up' : 'down';
   $('result-stats').innerHTML = `
+    <div class="k">特技分數</div><div class="v" style="color:var(--accent)">${s.score.toLocaleString('en-US')}</div>
+    <div class="k">翻轉圈數</div><div class="v">${s.flips}</div>
     <div class="k">投資組合</div><div class="v">${ntd(s.value)}</div>
     <div class="k">報酬率</div><div class="v ${retClass}">${(s.ret >= 0 ? '+' : '') + s.ret.toFixed(1)}%</div>
     <div class="k">完成度</div><div class="v">${(s.progress * 100).toFixed(0)}%</div>
@@ -233,6 +244,7 @@ const KEYMAP = {
   ArrowLeft: 'leanL', KeyA: 'leanL',
   ArrowRight: 'leanR', KeyD: 'leanR',
   Space: 'jump',
+  KeyN: 'nitro', ShiftLeft: 'nitro', ShiftRight: 'nitro',
 };
 
 window.addEventListener('keydown', e => {
@@ -257,6 +269,7 @@ window.addEventListener('keyup', e => {
 const TOUCHMAP = {
   't-gas': 'gas', 't-brake': 'brake',
   't-lean-l': 'leanL', 't-lean-r': 'leanR', 't-jump': 'jump',
+  't-nitro': 'nitro',
 };
 for (const [id, key] of Object.entries(TOUCHMAP)) {
   const el = $(id);
